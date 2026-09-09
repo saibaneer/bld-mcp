@@ -19,5 +19,8 @@ serde = { workspace = true }
 serde_yaml = { workspace = true }
 serde_json = { workspace = true }
 
+[dev-dependencies]
+syn = { workspace = true }
+
 [lints]
 workspace = true

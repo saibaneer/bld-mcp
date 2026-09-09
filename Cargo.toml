@@ -15,6 +15,10 @@ rust-version = "1.85"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
+# Dev-only: proves the scaffolder's generated Rust is syntactically valid. Full
+# compilation against bld-kernel is a Stage-4 check (that is when the kernel dep
+# arrives); syntactic validity is what Stage 2 can honestly witness on its own.
+syn = { version = "2", features = ["full", "parsing"] }
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }

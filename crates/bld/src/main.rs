@@ -7,9 +7,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use bld::render;
 use bld::spec::DomainSpec;
 use bld::topology::{self, Analysis, EdgeKind, Severity};
+use bld::{render, scaffold};
 
 const USAGE: &str = "\
 bld — map a domain, derive and validate its topology, scaffold a BoundaryDomain
@@ -41,8 +41,8 @@ fn main() -> ExitCode {
         }
         ["topology", "validate", spec] => cmd_validate(Path::new(spec)),
         ["topology", "render", spec] => cmd_render(Path::new(spec)),
-        ["scaffold", "domain", _spec] => not_yet("scaffold domain", 2),
-        ["scaffold", "adversarial", _spec] => not_yet("scaffold adversarial", 2),
+        ["scaffold", "domain", spec] => cmd_scaffold(Path::new(spec), Kind::Domain),
+        ["scaffold", "adversarial", spec] => cmd_scaffold(Path::new(spec), Kind::Adversarial),
         _ => {
             eprintln!("bld: unrecognized command: {}\n", args.join(" "));
             eprintln!("{USAGE}");
@@ -183,8 +183,44 @@ fn report(analysis: &Analysis) -> String {
     out
 }
 
-/// A planned-but-unbuilt command: name its stage and fail loudly (exit 3).
-fn not_yet(command: &str, stage: u8) -> ExitCode {
-    eprintln!("bld: `{command}` is not implemented yet (Stage {stage}). See docs/design.md.");
-    ExitCode::from(3)
+/// Which artifact `scaffold` emits.
+#[derive(Clone, Copy)]
+enum Kind {
+    Domain,
+    Adversarial,
+}
+
+fn cmd_scaffold(path: &Path, kind: Kind) -> ExitCode {
+    let spec = match load(path) {
+        Ok(spec) => spec,
+        Err(code) => return code,
+    };
+    let analysis = topology::analyze(&spec);
+    if !analysis.is_sound() {
+        print!("{}", report(&analysis));
+        eprintln!(
+            "\nbld: refusing to scaffold from an unsound topology ({} error(s)). \
+             Fix them (`bld topology validate {}`) first.",
+            analysis.error_count(),
+            path.display()
+        );
+        return ExitCode::from(1);
+    }
+
+    let stem = scaffold::snake(&analysis.topology.domain);
+    let (contents, out_name) = match kind {
+        Kind::Domain => (scaffold::domain(&analysis.topology), format!("{stem}.rs")),
+        Kind::Adversarial => (
+            scaffold::adversarial(&analysis.topology),
+            format!("{stem}_adversarial.rs"),
+        ),
+    };
+    let out_path = Path::new(&out_name);
+    if let Err(error) = std::fs::write(out_path, &contents) {
+        eprintln!("bld: cannot write {}: {error}", out_path.display());
+        return ExitCode::from(2);
+    }
+    println!("wrote {}", out_path.display());
+    println!("(a skeleton — fill the TODOs; compilation against bld-kernel is a Stage-4 check)");
+    ExitCode::SUCCESS
 }

@@ -35,13 +35,14 @@ agent can drive the whole flow. Rust-first: the scaffolding targets the
 
 ## Status
 
-**Stage 1 is done:** the YAML spec format, `bld topology validate` (totality +
-illegal-edge soundness), and `bld topology render` (`topology.json` + a Mermaid
-diagram). Work is staged (see [`docs/design.md`](docs/design.md)):
+**Stages 1–2 are done:** the YAML spec format, `bld topology validate`/`render`,
+and `bld scaffold domain`/`adversarial` (a faithful `impl BoundaryDomain` skeleton
++ an adversarial harness, generated from the same validated topology). Work is
+staged (see [`docs/design.md`](docs/design.md)):
 
 1. **Stage 1** — the YAML spec format + `bld topology validate` / `render` — ✅ done
-2. **Stage 2** — `bld scaffold domain` / `scaffold adversarial` — ← next
-3. **Stage 3** — the MCP server wrapping the CLI + a "map your domain" prompt
+2. **Stage 2** — `bld scaffold domain` / `scaffold adversarial` — ✅ done
+3. **Stage 3** — the MCP server wrapping the CLI + a "map your domain" prompt — ← next
 4. **Stage 4** — verify the shipped Rust still matches the spec (and publish `bld-kernel`)
 
 ## Quick start
@@ -53,8 +54,16 @@ cargo run -p bld -- topology validate examples/domain.example.yaml
 # Render topology.json + a Mermaid state diagram (topology.mmd):
 cargo run -p bld -- topology render examples/domain.example.yaml
 
+# Scaffold a Rust impl BoundaryDomain skeleton + its adversarial harness:
+cargo run -p bld -- scaffold domain      examples/domain.example.yaml
+cargo run -p bld -- scaffold adversarial examples/domain.example.yaml
+
 cargo run -p bld -- help
 ```
+
+The scaffold writes every state, input, effect and legal transition, leaves the
+guards and per-state data as `TODO`, and makes every illegal transition *absent*
+(`Undefined`). Full compilation against `bld-kernel` is verified at Stage 4.
 
 Any state × input pair the spec does not name is a `no_edge` — a transition that
 **does not exist**, not one refused at runtime. `validate` proves that grid is
