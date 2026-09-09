@@ -1,0 +1,22 @@
+[package]
+name = "bld-mcp"
+description = "An MCP server exposing the bld topology + scaffold tools, so an agent can map a domain and replicate the boundary."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "bld_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bld-mcp"
+path = "src/main.rs"
+
+[dependencies]
+bld = { path = "../bld" }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

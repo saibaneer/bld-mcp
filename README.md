@@ -35,15 +35,15 @@ agent can drive the whole flow. Rust-first: the scaffolding targets the
 
 ## Status
 
-**Stages 1–2 are done:** the YAML spec format, `bld topology validate`/`render`,
-and `bld scaffold domain`/`adversarial` (a faithful `impl BoundaryDomain` skeleton
-+ an adversarial harness, generated from the same validated topology). Work is
-staged (see [`docs/design.md`](docs/design.md)):
+**Stages 1–3 are done:** the YAML spec format and `bld topology validate`/`render`;
+`bld scaffold domain`/`adversarial` (a faithful `impl BoundaryDomain` skeleton + an
+adversarial harness); and a **`bld-mcp` server** that exposes all of it to an agent
+over MCP. Work is staged (see [`docs/design.md`](docs/design.md)):
 
 1. **Stage 1** — the YAML spec format + `bld topology validate` / `render` — ✅ done
 2. **Stage 2** — `bld scaffold domain` / `scaffold adversarial` — ✅ done
-3. **Stage 3** — the MCP server wrapping the CLI + a "map your domain" prompt — ← next
-4. **Stage 4** — verify the shipped Rust still matches the spec (and publish `bld-kernel`)
+3. **Stage 3** — the MCP server + a "map your domain" prompt — ✅ done
+4. **Stage 4** — verify the shipped Rust still matches the spec (and publish `bld-kernel`) — ← next
 
 ## Quick start
 
@@ -64,6 +64,33 @@ cargo run -p bld -- help
 The scaffold writes every state, input, effect and legal transition, leaves the
 guards and per-state data as `TODO`, and makes every illegal transition *absent*
 (`Undefined`). Full compilation against `bld-kernel` is verified at Stage 4.
+
+## Use it as an MCP server
+
+`bld-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
+(stdio, JSON-RPC 2.0) that exposes the same behaviour to an agent as four tools —
+`topology_validate`, `topology_render`, `scaffold_domain`, `scaffold_adversarial` —
+plus two resources (`bld://contract`, `bld://example`) and a `map_domain` prompt
+that walks a user through modelling their domain and producing a validated spec.
+
+```bash
+cargo build --release -p bld-mcp   # builds target/release/bld-mcp
+```
+
+Register it with any MCP client by pointing at that binary. For example, an
+`mcpServers` entry:
+
+```json
+{
+  "mcpServers": {
+    "bld": { "command": "/absolute/path/to/target/release/bld-mcp" }
+  }
+}
+```
+
+Each tool takes one argument — `spec`, the domain YAML — and returns the report,
+the artifacts, or the generated Rust as text. The agent never needs the filesystem;
+it passes the spec and reads the result.
 
 Any state × input pair the spec does not name is a `no_edge` — a transition that
 **does not exist**, not one refused at runtime. `validate` proves that grid is

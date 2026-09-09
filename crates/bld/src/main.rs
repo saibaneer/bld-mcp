@@ -3,13 +3,12 @@
 //! The `bld` CLI. Thin dispatch over the [`bld`] library; the MCP server will
 //! wrap this same binary, so all behaviour lives in the library, not here.
 
-use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
 use bld::spec::DomainSpec;
-use bld::topology::{self, Analysis, EdgeKind, Severity};
-use bld::{render, scaffold};
+use bld::topology;
+use bld::{render, report, scaffold};
 
 const USAGE: &str = "\
 bld — map a domain, derive and validate its topology, scaffold a BoundaryDomain
@@ -65,19 +64,11 @@ fn cmd_validate(path: &Path) -> ExitCode {
         Err(code) => return code,
     };
     let analysis = topology::analyze(&spec);
-    print!("{}", report(&analysis));
-
+    print!("{}", report::human(&analysis));
+    println!("\n{}", report::verdict(&analysis));
     if analysis.is_sound() {
-        println!(
-            "\nVALID — the topology is total ({} no_edge cells made explicit) and sound.",
-            analysis.no_edge_count()
-        );
         ExitCode::SUCCESS
     } else {
-        println!(
-            "\nINVALID — {} error(s). The topology is not sound.",
-            analysis.error_count()
-        );
         ExitCode::from(1)
     }
 }
@@ -89,7 +80,7 @@ fn cmd_render(path: &Path) -> ExitCode {
     };
     let analysis = topology::analyze(&spec);
     if !analysis.is_sound() {
-        print!("{}", report(&analysis));
+        print!("{}", report::human(&analysis));
         eprintln!(
             "\nbld: refusing to render an unsound topology ({} error(s)). \
              Fix them (`bld topology validate {}`) first.",
@@ -122,67 +113,6 @@ fn cmd_render(path: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// A human-readable report of a spec's per-door shape and every diagnostic.
-fn report(analysis: &Analysis) -> String {
-    let topology = &analysis.topology;
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "domain: {}   ({} states, initial: {})",
-        topology.domain,
-        topology.states.len(),
-        topology.initial,
-    );
-    for door in &topology.doors {
-        let total = door.cells.len();
-        let no_edge = door
-            .cells
-            .iter()
-            .filter(|c| c.kind == EdgeKind::NoEdge)
-            .count();
-        let fixed = if door.fixed_table {
-            "  [fixed_table]"
-        } else {
-            ""
-        };
-        let _ = writeln!(
-            out,
-            "  {:<13} {:>2} inputs   {:>2} edges   {:>2} no_edge{fixed}",
-            door.name,
-            door.inputs.len(),
-            total - no_edge,
-            no_edge,
-        );
-    }
-
-    let warnings: Vec<&str> = analysis
-        .diagnostics
-        .iter()
-        .filter(|d| d.severity == Severity::Warning)
-        .map(|d| d.message.as_str())
-        .collect();
-    if !warnings.is_empty() {
-        out.push_str("\nwarnings:\n");
-        for message in warnings {
-            let _ = writeln!(out, "  - {message}");
-        }
-    }
-
-    let errors: Vec<&str> = analysis
-        .diagnostics
-        .iter()
-        .filter(|d| d.severity == Severity::Error)
-        .map(|d| d.message.as_str())
-        .collect();
-    if !errors.is_empty() {
-        out.push_str("\nerrors:\n");
-        for message in errors {
-            let _ = writeln!(out, "  - {message}");
-        }
-    }
-    out
-}
-
 /// Which artifact `scaffold` emits.
 #[derive(Clone, Copy)]
 enum Kind {
@@ -197,7 +127,7 @@ fn cmd_scaffold(path: &Path, kind: Kind) -> ExitCode {
     };
     let analysis = topology::analyze(&spec);
     if !analysis.is_sound() {
-        print!("{}", report(&analysis));
+        print!("{}", report::human(&analysis));
         eprintln!(
             "\nbld: refusing to scaffold from an unsound topology ({} error(s)). \
              Fix them (`bld topology validate {}`) first.",
