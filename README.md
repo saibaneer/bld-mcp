@@ -68,17 +68,24 @@ guards and per-state data as `TODO`, and makes every illegal transition *absent*
 ## Use it as an MCP server
 
 `bld-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
-(stdio, JSON-RPC 2.0) that exposes the same behaviour to an agent as four tools —
-`topology_validate`, `topology_render`, `scaffold_domain`, `scaffold_adversarial` —
-plus two resources (`bld://contract`, `bld://example`) and a `map_domain` prompt
-that walks a user through modelling their domain and producing a validated spec.
+(stdio, JSON-RPC 2.0) that exposes the whole flow to an agent, so another team can
+map a domain and replicate the boundary from inside their coding assistant.
+
+### Setup
+
+Build the binary, then register it with your MCP client:
 
 ```bash
-cargo build --release -p bld-mcp   # builds target/release/bld-mcp
+cargo build --release -p bld-mcp        # → target/release/bld-mcp
 ```
 
-Register it with any MCP client by pointing at that binary. For example, an
-`mcpServers` entry:
+**Claude Code:**
+
+```bash
+claude mcp add bld -- /absolute/path/to/target/release/bld-mcp
+```
+
+**Any client using an `mcpServers` config** (Claude Desktop, Cursor, …):
 
 ```json
 {
@@ -88,9 +95,41 @@ Register it with any MCP client by pointing at that binary. For example, an
 }
 ```
 
-Each tool takes one argument — `spec`, the domain YAML — and returns the report,
-the artifacts, or the generated Rust as text. The agent never needs the filesystem;
-it passes the spec and reads the result.
+It speaks stdio JSON-RPC and needs no network, no config, and no environment.
+
+### What it exposes
+
+**Tools** — each takes one argument, `spec` (the domain YAML), and returns text:
+
+| Tool | Returns |
+|---|---|
+| `topology_validate` | a per-door report + a `VALID` / `INVALID` verdict |
+| `topology_render` | `topology.json` (the published graph) + a Mermaid state diagram |
+| `scaffold_domain` | a Rust `impl BoundaryDomain` skeleton |
+| `scaffold_adversarial` | a Rust test asserting every illegal transition is absent |
+
+A spec that does not parse is the only tool *error*; a spec that parses but is
+unsound is a normal result whose text explains what is wrong.
+
+**Resources** — `bld://contract` (the BLD model and how to shape a spec — an agent
+should read this first) and `bld://example` (the commented spec template).
+
+**Prompt** — `map_domain` (optional `description` argument): interviews the user and
+produces a validated spec.
+
+### A worked flow
+
+An agent modelling, say, a loan-approval domain typically:
+
+1. reads `bld://contract` and `bld://example` to learn the model and the spec shape;
+2. optionally runs the `map_domain` prompt to interview the user;
+3. drafts a `spec` and calls `topology_validate`, fixing what it reports until `VALID`;
+4. calls `scaffold_domain` and `scaffold_adversarial` for the `BoundaryDomain`
+   skeleton and its adversarial test;
+5. calls `topology_render` to publish the graph for human review.
+
+The agent never touches the filesystem — every tool takes the spec as text and
+returns text.
 
 Any state × input pair the spec does not name is a `no_edge` — a transition that
 **does not exist**, not one refused at runtime. `validate` proves that grid is
