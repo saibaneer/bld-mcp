@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use bld::spec::DomainSpec;
 use bld::topology;
-use bld::{render, report, scaffold};
+use bld::{render, report, scaffold, verify};
 
 const USAGE: &str = "\
 bld — map a domain, derive and validate its topology, scaffold a BoundaryDomain
@@ -17,14 +17,15 @@ USAGE:
     bld <command> [args]
 
 COMMANDS:
-    topology validate <spec.yaml>     Check a domain spec for totality and
-                                      illegal-edge soundness
-    topology render   <spec.yaml>     Write topology.json + topology.mmd (Mermaid)
-    scaffold domain   <spec.yaml>     Generate an impl BoundaryDomain skeleton
-                                      (Stage 2)
-    scaffold adversarial <spec.yaml>  Generate the topology-adversary + hostile
-                                      proposer harness (Stage 2)
-    help                              Show this help
+    topology validate <spec.yaml>            Check a spec for totality + soundness
+    topology render   <spec.yaml>            Write topology.json + topology.mmd
+    topology verify   <spec.yaml> <t.json>   Check an exported topology.json against
+                                             the spec — catch drift
+    scaffold domain      <spec.yaml>         An impl BoundaryDomain skeleton
+    scaffold adversarial <spec.yaml>         A harness asserting illegal edges absent
+    scaffold probe       <spec.yaml>         An exporter that emits the domain's real
+                                             topology.json for `topology verify`
+    help                                     Show this help
 
 See docs/design.md for the design and examples/domain.example.yaml for a
 commented, domain-neutral template.";
@@ -40,8 +41,10 @@ fn main() -> ExitCode {
         }
         ["topology", "validate", spec] => cmd_validate(Path::new(spec)),
         ["topology", "render", spec] => cmd_render(Path::new(spec)),
+        ["topology", "verify", spec, exported] => cmd_verify(Path::new(spec), Path::new(exported)),
         ["scaffold", "domain", spec] => cmd_scaffold(Path::new(spec), Kind::Domain),
         ["scaffold", "adversarial", spec] => cmd_scaffold(Path::new(spec), Kind::Adversarial),
+        ["scaffold", "probe", spec] => cmd_scaffold(Path::new(spec), Kind::Probe),
         _ => {
             eprintln!("bld: unrecognized command: {}\n", args.join(" "));
             eprintln!("{USAGE}");
@@ -118,6 +121,54 @@ fn cmd_render(path: &Path) -> ExitCode {
 enum Kind {
     Domain,
     Adversarial,
+    Probe,
+}
+
+fn cmd_verify(spec_path: &Path, exported_path: &Path) -> ExitCode {
+    let spec = match load(spec_path) {
+        Ok(spec) => spec,
+        Err(code) => return code,
+    };
+    let analysis = topology::analyze(&spec);
+    if !analysis.is_sound() {
+        print!("{}", report::human(&analysis));
+        eprintln!("\nbld: fix the spec's errors before verifying a domain against it.");
+        return ExitCode::from(1);
+    }
+    let text = match std::fs::read_to_string(exported_path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("bld: cannot read {}: {error}", exported_path.display());
+            return ExitCode::from(2);
+        }
+    };
+    let exported: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!(
+                "bld: {} is not valid JSON: {error}",
+                exported_path.display()
+            );
+            return ExitCode::from(2);
+        }
+    };
+    match verify::verify(&analysis.topology, &exported) {
+        Ok(result) => {
+            print!("{}", verify::report(&result));
+            if result.matches() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+        Err(why) => {
+            eprintln!(
+                "bld: {} is not a topology.json: {why}",
+                exported_path.display()
+            );
+            ExitCode::from(2)
+        }
+    }
 }
 
 fn cmd_scaffold(path: &Path, kind: Kind) -> ExitCode {
@@ -143,6 +194,10 @@ fn cmd_scaffold(path: &Path, kind: Kind) -> ExitCode {
         Kind::Adversarial => (
             scaffold::adversarial(&analysis.topology),
             format!("{stem}_adversarial.rs"),
+        ),
+        Kind::Probe => (
+            scaffold::probe(&analysis.topology),
+            format!("{stem}_probe.rs"),
         ),
     };
     let out_path = Path::new(&out_name);

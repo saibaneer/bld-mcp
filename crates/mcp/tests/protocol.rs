@@ -43,7 +43,7 @@ fn initialize_announces_the_server_and_capabilities() {
 }
 
 #[test]
-fn tools_list_advertises_the_four_tools_each_requiring_a_spec() {
+fn tools_list_advertises_the_tools_each_requiring_a_spec() {
     let response = dispatch(&req("tools/list", json!({}))).unwrap();
     let tools = response["result"]["tools"].as_array().expect("tools array");
     let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
@@ -53,17 +53,28 @@ fn tools_list_advertises_the_four_tools_each_requiring_a_spec() {
             "topology_validate",
             "topology_render",
             "scaffold_domain",
-            "scaffold_adversarial"
+            "scaffold_adversarial",
+            "scaffold_probe",
+            "topology_verify",
         ]
     );
+    // Every tool takes a spec; topology_verify additionally takes the exported json.
     for tool in tools {
-        assert_eq!(
-            tool["inputSchema"]["required"],
-            json!(["spec"]),
+        let required = tool["inputSchema"]["required"].as_array().unwrap();
+        assert!(
+            required.iter().any(|v| v == "spec"),
             "{} must require a spec",
             tool["name"]
         );
     }
+    let verify = tools
+        .iter()
+        .find(|t| t["name"] == "topology_verify")
+        .unwrap();
+    assert_eq!(
+        verify["inputSchema"]["required"],
+        json!(["spec", "topology"])
+    );
 }
 
 #[test]
@@ -143,6 +154,30 @@ fn scaffold_refuses_an_unsound_spec() {
         !text.contains("impl BoundaryDomain"),
         "no code from an unsound spec"
     );
+}
+
+#[test]
+fn verify_reports_no_drift_when_the_domain_matches_the_spec() {
+    // Render the spec's own topology.json via the render tool, then verify against it.
+    let rendered = tool_text("topology_render", EXAMPLE);
+    let json = rendered
+        .split("\n\ntopology.mmd:")
+        .next()
+        .unwrap()
+        .trim_start_matches("topology.json:\n");
+    let response = dispatch(&req(
+        "tools/call",
+        json!({ "name": "topology_verify", "arguments": { "spec": EXAMPLE, "topology": json } }),
+    ))
+    .unwrap();
+    let text = response["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("MATCHES"), "{text}");
+}
+
+#[test]
+fn scaffold_probe_returns_an_exporter() {
+    let text = tool_text("scaffold_probe", EXAMPLE);
+    assert!(text.contains("pub async fn export()"), "{text}");
 }
 
 #[test]
