@@ -38,6 +38,33 @@ absent transition is a path that DOES NOT EXIST — not a rule enforced at runti
 That is the whole security idea: illegal outcomes are unreachable by construction,
 and the graph is published so an adversary already has it.
 
+## How a request flows at runtime
+
+What you scaffold is the DOMAIN — a pure decision function. Your controller assembles
+the inputs, calls it, and enacts the decision. The domain decides; the controller does.
+
+  API request
+     |
+     v
+  Controller  -- assembles the four inputs -->  domain.resolve_proposal(
+     |            state      (loads from the DB)     state, proposal,
+     |            proposal   (from the request body) authority, context)
+     |            authority  (from the session/auth)       |
+     |            context    (loads what it needs)         v
+     |                                          Resolution (the decision)
+     | <----------------- returns to the caller ----------+
+     v   the controller ENACTS the decision:
+     |-- Ready(plan)  -> commit (version check) + dispatch the effect -> 200/201
+     |-- Denied(why)  -> 403  (it exists, but you can't)
+     |-- Undefined    -> 404  (that action does not exist in this state)
+     v
+  API response
+
+The Resolution is internal — the controller turns it into the HTTP response. A
+Ready(ExternalEffect) is a plan, not a done deal: commit the intent, invoke the effect,
+and the transition finishes later when the provider's confirmation returns as a verified
+fact through resolve_fact.
+
 ## The tools
 - topology_validate(spec): totality + illegal-edge soundness on a YAML spec.
 - topology_render(spec): topology.json + a Mermaid state diagram.

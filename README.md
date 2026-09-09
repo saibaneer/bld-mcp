@@ -34,6 +34,39 @@ agent can drive the whole flow. Rust-first: the scaffolding targets the
 [`bld-kernel`](https://crates.io/crates/bld-kernel) crate, whose determinism guarantees
 are typed.
 
+## How a request flows through the boundary
+
+What `bld` scaffolds is the *domain* — the pure decision core. At runtime your
+controller assembles the inputs, calls the domain for a decision, and enacts it.
+**The domain decides; the controller does.**
+
+```text
+API request
+   │
+   ▼
+Controller ── assembles the four inputs ──►  domain.resolve_proposal(
+   │            • state       (loads from the DB)        state, proposal,
+   │            • proposal    (from the request body)    authority, context)
+   │            • authority   (from the session/auth)          │
+   │            • context     (loads what it needs)            ▼
+   │                                              Resolution (the decision)
+   ◄──────────────────  returns to the caller  ──────────┘
+   │
+   ▼   the controller ENACTS the decision:
+   ├─ Ready(plan)  → commit to the DB (version check) + dispatch the effect → 200/201
+   ├─ Denied(why)  → 403  (it exists, but you can't)
+   └─ Undefined    → 404  (that action doesn't exist in this state)
+   │
+   ▼
+API response
+```
+
+The `Resolution` never leaves the building — it is an internal decision the controller
+translates into an HTTP response. A `Ready(ExternalEffect { .. })` is a *plan*, not a
+done deal: the controller commits the intent, invokes the effect, and the transition
+finishes when the provider's confirmation returns as a **verified fact** through
+`resolve_fact`.
+
 ## Status
 
 **The tool is functionally complete:** the YAML spec format, `bld topology
