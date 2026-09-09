@@ -35,15 +35,17 @@ agent can drive the whole flow. Rust-first: the scaffolding targets the
 
 ## Status
 
-**Stages 1–3 are done:** the YAML spec format and `bld topology validate`/`render`;
-`bld scaffold domain`/`adversarial` (a faithful `impl BoundaryDomain` skeleton + an
-adversarial harness); and a **`bld-mcp` server** that exposes all of it to an agent
-over MCP. Work is staged (see [`docs/design.md`](docs/design.md)):
+**The tool is functionally complete:** the YAML spec format, `bld topology
+validate`/`render`/`verify`, `bld scaffold domain`/`adversarial`/`probe`, and a
+**`bld-mcp` server** that exposes all of it to an agent over MCP. Work is staged
+(see [`docs/design.md`](docs/design.md)):
 
 1. **Stage 1** — the YAML spec format + `bld topology validate` / `render` — ✅ done
 2. **Stage 2** — `bld scaffold domain` / `scaffold adversarial` — ✅ done
 3. **Stage 3** — the MCP server + a "map your domain" prompt — ✅ done
-4. **Stage 4** — verify the shipped Rust still matches the spec (and publish `bld-kernel`) — ← next
+4. **Stage 4** — `bld topology verify` + `scaffold probe` (prove the shipped Rust
+   still matches the spec) — ✅ done · **publishing `bld-kernel` to crates.io is
+   deferred** and needs the owner's explicit sign-off (it is irreversible)
 
 ## Quick start
 
@@ -54,9 +56,13 @@ cargo run -p bld -- topology validate examples/domain.example.yaml
 # Render topology.json + a Mermaid state diagram (topology.mmd):
 cargo run -p bld -- topology render examples/domain.example.yaml
 
-# Scaffold a Rust impl BoundaryDomain skeleton + its adversarial harness:
+# Scaffold a Rust impl BoundaryDomain skeleton + its adversarial harness + a probe:
 cargo run -p bld -- scaffold domain      examples/domain.example.yaml
 cargo run -p bld -- scaffold adversarial examples/domain.example.yaml
+cargo run -p bld -- scaffold probe       examples/domain.example.yaml
+
+# Verify a domain's exported topology.json still matches the spec (catch drift):
+cargo run -p bld -- topology verify examples/domain.example.yaml topology.json
 
 cargo run -p bld -- help
 ```

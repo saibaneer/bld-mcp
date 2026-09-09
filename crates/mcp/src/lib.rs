@@ -11,7 +11,7 @@
 
 use bld::spec::DomainSpec;
 use bld::topology::{self, Analysis};
-use bld::{render, report, scaffold};
+use bld::{render, report, scaffold, verify};
 use serde_json::{Value, json};
 
 /// The example spec, served as a resource and used in the prompt.
@@ -128,6 +128,23 @@ fn tools() -> Value {
             "description": "Generate a Rust test that asserts every illegal (state, proposal) is Undefined — the boundary's structure, witnessed.",
             "inputSchema": spec_schema("scaffold from"),
         },
+        {
+            "name": "scaffold_probe",
+            "description": "Generate a Rust exporter that emits the domain's real topology.json, for topology_verify to check against the spec.",
+            "inputSchema": spec_schema("scaffold a probe for"),
+        },
+        {
+            "name": "topology_verify",
+            "description": "Check a domain's exported topology.json against its spec and report any drift (a transition the code grew, lost, or re-targeted).",
+            "inputSchema": json!({
+                "type": "object",
+                "properties": {
+                    "spec": { "type": "string", "description": "the domain spec, as YAML" },
+                    "topology": { "type": "string", "description": "the domain's exported topology.json (from `scaffold probe`)" }
+                },
+                "required": ["spec", "topology"],
+            }),
+        },
     ])
 }
 
@@ -137,9 +154,13 @@ fn tools_call(params: Option<&Value>) -> Result<Value, Value> {
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| rpc_error(-32602, "missing tool name"))?;
-    let spec = params
-        .get("arguments")
+    let args = params.get("arguments");
+    let spec = args
         .and_then(|a| a.get("spec"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let topology_arg = args
+        .and_then(|a| a.get("topology"))
         .and_then(Value::as_str)
         .unwrap_or("");
 
@@ -164,6 +185,8 @@ fn tools_call(params: Option<&Value>) -> Result<Value, Value> {
         }),
         "scaffold_domain" => run(spec, |a| scaffold_or_refuse(a, scaffold::domain)),
         "scaffold_adversarial" => run(spec, |a| scaffold_or_refuse(a, scaffold::adversarial)),
+        "scaffold_probe" => run(spec, |a| scaffold_or_refuse(a, scaffold::probe)),
+        "topology_verify" => run_verify(spec, topology_arg),
         other => return Err(rpc_error(-32602, &format!("unknown tool: {other}"))),
     };
 
@@ -194,6 +217,26 @@ fn scaffold_or_refuse(
             "{}\n\n(refusing to scaffold from an unsound topology — fix the errors first)",
             report::verdict(analysis)
         )
+    }
+}
+
+/// Verify an exported `topology.json` against a spec. A parse failure of either is
+/// the tool error; a sound spec plus a valid `topology.json` yields the drift report.
+fn run_verify(spec: &str, exported: &str) -> Result<String, String> {
+    let parsed =
+        DomainSpec::from_yaml(spec).map_err(|error| format!("the spec did not parse: {error}"))?;
+    let analysis = topology::analyze(&parsed);
+    if !analysis.is_sound() {
+        return Ok(format!(
+            "{}\n\n(fix the spec's errors before verifying a domain against it)",
+            report::verdict(&analysis)
+        ));
+    }
+    let value: Value = serde_json::from_str(exported)
+        .map_err(|error| format!("the exported topology.json did not parse: {error}"))?;
+    match verify::verify(&analysis.topology, &value) {
+        Ok(result) => Ok(verify::report(&result)),
+        Err(why) => Err(format!("the exported value is not a topology.json: {why}")),
     }
 }
 

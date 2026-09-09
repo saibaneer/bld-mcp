@@ -9,3 +9,4 @@ pub mod report;
 pub mod scaffold;
 pub mod spec;
 pub mod topology;
+pub mod verify;
