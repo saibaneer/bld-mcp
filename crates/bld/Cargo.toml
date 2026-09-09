@@ -1,0 +1,18 @@
+[package]
+name = "bld"
+description = "The BLD CLI: map a domain, derive and validate its topology, scaffold a BoundaryDomain."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "bld"
+path = "src/main.rs"
+
+# No dependencies yet — this first commit is a buildable stub that declares the
+# command surface. Stage 1 adds serde + serde_yaml (parse the spec) and
+# serde_json (emit topology.json).
+
+[lints]
+workspace = true

@@ -1,0 +1,79 @@
+# =============================================================================
+# BLD domain spec — a commented, domain-neutral template.
+#
+# DRAFT FORMAT: this shape is finalized in Stage 1 (see docs/design.md §4.1).
+# It is deliberately generic. The concrete names below describe a small,
+# made-up "approval workflow" purely so the file reads as a worked example;
+# swap every name for your own domain's. Inline `# e.g.` notes show how other
+# domains (town-hall booking, loan approval) map onto the same construct.
+#
+# The core idea: behaviour belongs to STATES. For every (state, input) pair the
+# spec must say what happens — a transition, or nothing. "Nothing" is `no_edge`:
+# a path that DOES NOT EXIST, not a rule enforced at runtime. `bld topology
+# validate` fails if you leave any pair unstated (that is the *totality* check).
+# =============================================================================
+
+domain: approval-workflow          # e.g. town-hall-booking, loan-approval
+initial: Draft                     # the state a fresh instance starts in
+
+# Every state your domain can be in. A state is a name here; the Rust skeleton
+# `scaffold` generates turns each into a struct that carries that state's data.
+states:
+  - Draft
+  - Submitted
+  - UnderReview
+  - Approved
+  - Rejected
+  - Committing        # a transient state waiting on an external effect to confirm
+  - Committed
+  - Cancelled
+
+# -----------------------------------------------------------------------------
+# The three "doors" — the only ways a state can change, by PROVENANCE.
+# Every door lists its `inputs`; every (state, input) not given an edge below is
+# `no_edge` (absent). You do not list the no_edges — the validator reports them.
+# -----------------------------------------------------------------------------
+
+# 1. proposal — what someone WANTS (intent). Untrusted: a proposal is data, and
+#    an existing edge may still be refused by a guard (authority/policy), but a
+#    proposal can never CREATE an edge that the topology does not have.
+proposal:
+  fixed_table: true                # decided by (state, input) alone — no persisted lookup
+  inputs: [Submit, StartReview, Approve, Reject, Commit, Cancel]
+  edges:
+    # from        input        to            (optional) effect
+    - { from: Draft,       input: Submit,      to: Submitted }
+    - { from: Submitted,   input: StartReview, to: UnderReview }
+    - { from: UnderReview, input: Approve,     to: Approved }     # guard: requires reviewer authority
+    - { from: UnderReview, input: Reject,      to: Rejected }
+    # An `effect` marks a transition that reaches OUT to the world. The move to
+    # Committing dispatches `PerformCommit`; the world confirms it via the fact
+    # door below — never the proposer.  # e.g. town-hall: Book -> BookingInProgress, effect Book
+    - { from: Approved,    input: Commit,      to: Committing, effect: PerformCommit }
+    # Cancel is legal from several states; each must be stated explicitly.
+    - { from: Draft,       input: Cancel,      to: Cancelled }
+    - { from: Submitted,   input: Cancel,      to: Cancelled }
+    - { from: UnderReview, input: Cancel,      to: Cancelled }
+    # NOTE what is absent: there is no (Approved, Reject), no (Committed, Cancel),
+    # no (Rejected, Commit)... `bld topology validate` lists every such no_edge so
+    # you can confirm each absence is intended.
+
+# 2. fact — verified external TRUTH, in your domain's vocabulary. No authority
+#    parameter: a fact is admitted by its verifier, not authorized by a
+#    principal (recovery must run with a hostile model, or no model at all).
+fact:
+  fixed_table: false               # this door binds against the persisted plan
+  inputs: [CommitConfirmed, CommitRejected]
+  edges:
+    - { from: Committing, input: CommitConfirmed, to: Committed }
+    - { from: Committing, input: CommitRejected,  to: Approved }   # back to a re-committable state
+
+# 3. system_event — a deterministic RUNTIME fact (a retry budget, a timeout).
+#    Neither intent nor external truth. It records a pursuit decision and moves
+#    no state (per the reference design), so edges here name a `records` outcome
+#    rather than a `to` state.
+system_event:
+  fixed_table: true
+  inputs: [CommitTimedOut]
+  edges:
+    - { from: Committing, input: CommitTimedOut, records: escalate }
