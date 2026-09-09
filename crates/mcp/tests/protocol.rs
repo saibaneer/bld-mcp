@@ -177,7 +177,7 @@ fn verify_reports_no_drift_when_the_domain_matches_the_spec() {
 #[test]
 fn scaffold_probe_returns_an_exporter() {
     let text = tool_text("scaffold_probe", EXAMPLE);
-    assert!(text.contains("pub async fn export()"), "{text}");
+    assert!(text.contains("pub fn export()"), "{text}");
 }
 
 #[test]

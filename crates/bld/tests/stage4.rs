@@ -123,8 +123,5 @@ fn the_probe_enumerates_every_state_and_input() {
         );
     }
     assert!(code.contains("fn all_states()") && code.contains("fn all_proposals()"));
-    assert!(
-        code.contains("pub async fn export()"),
-        "the exporter entrypoint"
-    );
+    assert!(code.contains("pub fn export()"), "the exporter entrypoint");
 }
