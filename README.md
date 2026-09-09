@@ -31,7 +31,8 @@ which inputs are legal and where they lead. `bld` then:
 
 The `bld` CLI is the source of truth; an MCP server (later) wraps it so a coding
 agent can drive the whole flow. Rust-first: the scaffolding targets the
-`bld-kernel` crate, whose determinism guarantees are typed.
+[`bld-kernel`](https://crates.io/crates/bld-kernel) crate, whose determinism guarantees
+are typed.
 
 ## Status
 
@@ -69,7 +70,9 @@ cargo run -p bld -- help
 
 The scaffold writes every state, input, effect and legal transition, leaves the
 guards and per-state data as `TODO`, and makes every illegal transition *absent*
-(`Undefined`). Full compilation against `bld-kernel` is verified at Stage 4.
+(`Undefined`). The generated skeleton compiles against the published
+[`bld-kernel = "0.1"`](https://crates.io/crates/bld-kernel) — verified end to end: a
+scaffolded domain builds against the real crate and its adversarial suite passes.
 
 ## Use it as an MCP server
 
