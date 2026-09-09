@@ -35,19 +35,31 @@ agent can drive the whole flow. Rust-first: the scaffolding targets the
 
 ## Status
 
-Early. This commit is the **foundation + a buildable CLI stub** that declares the
-command surface. Work is staged (see [`docs/design.md`](docs/design.md)):
+**Stage 1 is done:** the YAML spec format, `bld topology validate` (totality +
+illegal-edge soundness), and `bld topology render` (`topology.json` + a Mermaid
+diagram). Work is staged (see [`docs/design.md`](docs/design.md)):
 
-1. **Stage 1** — the YAML spec format + `bld topology validate` / `render`  ← next
-2. **Stage 2** — `bld scaffold domain` / `scaffold adversarial`
+1. **Stage 1** — the YAML spec format + `bld topology validate` / `render` — ✅ done
+2. **Stage 2** — `bld scaffold domain` / `scaffold adversarial` — ← next
 3. **Stage 3** — the MCP server wrapping the CLI + a "map your domain" prompt
 4. **Stage 4** — verify the shipped Rust still matches the spec (and publish `bld-kernel`)
 
 ## Quick start
 
 ```bash
+# Validate a domain spec — totality + illegal-edge soundness (exit 1 on errors):
+cargo run -p bld -- topology validate examples/domain.example.yaml
+
+# Render topology.json + a Mermaid state diagram (topology.mmd):
+cargo run -p bld -- topology render examples/domain.example.yaml
+
 cargo run -p bld -- help
 ```
+
+Any state × input pair the spec does not name is a `no_edge` — a transition that
+**does not exist**, not one refused at runtime. `validate` proves that grid is
+total and every authored edge is sound; `render` publishes it so an adversary (and
+your reviewer) has the map.
 
 - The design note: [`docs/design.md`](docs/design.md)
 - A commented, domain-neutral spec template: [`examples/domain.example.yaml`](examples/domain.example.yaml)
