@@ -71,7 +71,7 @@ cargo run -p bld -- help
 The scaffold writes every state, input, effect and legal transition, leaves the
 guards and per-state data as `TODO`, and makes every illegal transition *absent*
 (`Undefined`). The generated skeleton compiles against the published
-[`bld-kernel = "0.1"`](https://crates.io/crates/bld-kernel) — verified end to end: a
+[`bld-kernel = "0.2"`](https://crates.io/crates/bld-kernel) — verified end to end: a
 scaffolded domain builds against the real crate and its adversarial suite passes.
 
 ## Use it as an MCP server
